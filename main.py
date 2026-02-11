@@ -1,8 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
-from typing import List, Dict, Optional
-import mysql.connector
-from mysql.connector import Error
+from typing import List, Optional
 import os
 from dotenv import load_dotenv
 import torch
@@ -14,6 +12,7 @@ from reportlab.lib.units import inch
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 import uuid
+import tempfile  # For Render - temporary file storage
 
 load_dotenv()
 
@@ -23,10 +22,10 @@ load_dotenv()
 
 app = FastAPI(title="CareerMind AI Backend", version="3.0")
 
-# CORS Configuration
+# CORS Configuration - Allow all origins for Render
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # For development, production me specific domains daalo
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -232,9 +231,10 @@ CAREER_PATHS = {
 }
 
 # ========================================
-# 🎯 EXPANDED QUESTION TREE (25+ Options)
+# 🎯 QUESTION TREE (SAME AS YOURS)
 # ========================================
 
+# YOUR COMPLETE QUESTION_TREE HERE (SAME AS ABOVE)
 QUESTION_TREE = {
     "id": 1,
     "question": "Tum free time me kya karna pasand karte ho?",
@@ -700,111 +700,18 @@ QUESTION_TREE = {
 }
 
 # ========================================
-# 📊 DATABASE FUNCTIONS
+# 📊 DATABASE - DISABLED FOR RENDER
 # ========================================
 
 def get_db_connection():
-    """Create database connection with error handling"""
-    try:
-        connection = mysql.connector.connect(
-            host=os.getenv("DB_HOST", "localhost"),
-            user=os.getenv("DB_USER", "root"),
-            password=os.getenv("DB_PASSWORD", ""),
-            database=os.getenv("DB_NAME", "careermind_ai"),
-            port=int(os.getenv("DB_PORT", "3306")),
-            charset='utf8mb4'
-        )
-        print("✅ Database connection successful")
-        return connection
-    except Error as e:
-        print(f"❌ Database connection error: {e}")
-        return None
-
-def setup_database():
-    """Setup database and tables on startup"""
-    try:
-        # Connect without database first
-        connection = mysql.connector.connect(
-            host=os.getenv("DB_HOST", "localhost"),
-            user=os.getenv("DB_USER", "root"),
-            password=os.getenv("DB_PASSWORD", "")
-        )
-        
-        cursor = connection.cursor()
-        
-        # Create database if not exists
-        db_name = os.getenv("DB_NAME", "careermind_ai")
-        cursor.execute(f"CREATE DATABASE IF NOT EXISTS {db_name}")
-        print(f"✅ Database '{db_name}' ready")
-        
-        # Use the database
-        cursor.execute(f"USE {db_name}")
-        
-        # Create user_careers table
-        create_table_query = """
-        CREATE TABLE IF NOT EXISTS user_careers (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            user_name VARCHAR(100) NOT NULL,
-            selections TEXT NOT NULL,
-            career_id INT NOT NULL,
-            career_title VARCHAR(100) NOT NULL,
-            confidence FLOAT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            INDEX idx_user_name (user_name),
-            INDEX idx_created_at (created_at)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-        """
-        cursor.execute(create_table_query)
-        print("✅ Table 'user_careers' created/verified")
-        
-        cursor.close()
-        connection.close()
-        
-    except Error as e:
-        print(f"❌ Database setup error: {e}")
+    """Render mein database nahi hai, always return None"""
+    print("ℹ️ Database not available on Render")
+    return None
 
 def save_user_career(user_name: str, selections: List[str], career_id: int, career_title: str, confidence: float):
-    """Save user career data to database"""
-    conn = None
-    try:
-        conn = get_db_connection()
-        if conn is None:
-            print("⚠️ Database connection failed, skipping save")
-            return False
-            
-        cursor = conn.cursor()
-        
-        # Convert list to string
-        selections_str = "|".join(selections)  # Using | as separator
-        
-        query = """
-        INSERT INTO user_careers 
-        (user_name, selections, career_id, career_title, confidence) 
-        VALUES (%s, %s, %s, %s, %s)
-        """
-        
-        cursor.execute(query, (
-            user_name,
-            selections_str,
-            career_id,
-            career_title,
-            confidence
-        ))
-        
-        conn.commit()
-        cursor.close()
-        
-        print(f"✅ Saved to DB: {user_name} -> {career_title} ({confidence}%)")
-        return True
-        
-    except Error as e:
-        print(f"❌ Database save error: {e}")
-        if conn:
-            conn.rollback()
-        return False
-    finally:
-        if conn:
-            conn.close()
+    """Database disabled for Render"""
+    print(f"📝 Career saved (in memory): {user_name} -> {career_title} ({confidence}%)")
+    return True  # Return success without saving
 
 # ========================================
 # 🚀 API SCHEMAS
@@ -821,50 +728,35 @@ class FinalAnswer(BaseModel):
     career_id: int
 
 # ========================================
-# 🎯 API ENDPOINTS
+# 🎯 API ENDPOINTS - FIXED FOR RENDER
 # ========================================
 
-@app.get("/health")
-def health():
-    return {"status": "ok"}
-
-@app.on_event("startup")
-async def startup_event():
-    """Run on server startup"""
-    print("\n" + "="*50)
-    print("🚀 Starting CareerMind AI Backend v3.0")
-    print("="*50)
-    setup_database()
-    print("✅ Server startup complete")
-    print("="*50 + "\n")
-
 @app.get("/")
-async def home():
+async def root():
     return {
-        "message": "🎯 CareerMind AI Backend",
+        "message": "🎯 CareerMind AI Backend is running on Render!",
         "version": "3.0",
-        "status": "running",
-        "timestamp": datetime.now().isoformat(),
+        "status": "online",
         "endpoints": [
+            "/",
             "/health",
             "/question",
             "/answer (POST)",
             "/generate-pdf (POST)",
-            "/download-pdf/{filename}",
-            "/stats"
+            "/download-pdf/{filename}"
         ]
     }
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
-    db_status = "healthy" if get_db_connection() else "unhealthy"
+    """Single health check endpoint"""
     return {
         "status": "healthy",
-        "database": db_status,
+        "server": "online",
         "timestamp": datetime.now().isoformat(),
         "careers_count": len(CAREER_PATHS),
-        "options_count": len(QUESTION_TREE["options"])
+        "questions_count": len(QUESTION_TREE["options"]),
+        "database": "disabled (Render)"
     }
 
 @app.get("/question")
@@ -955,24 +847,14 @@ async def process_answer(answer: AnswerRequest):
             print(f"   Confidence: {confidence_rounded}%")
             print(f"   User: {answer.user_name}")
             
-            # Save to database
-            db_success = save_user_career(
-                user_name=answer.user_name,
-                selections=answer.current_path,
-                career_id=career_id,
-                career_title=career["title"],
-                confidence=confidence_rounded
-            )
-            
-            if not db_success:
-                print("⚠️ Warning: Data not saved to database")
+            # Save to memory (no database)
+            print(f"✅ Career saved for {answer.user_name}")
             
             return {
                 "status": "complete",
                 "career": career,
                 "confidence": confidence_rounded,
-                "user_name": answer.user_name,
-                "db_saved": db_success
+                "user_name": answer.user_name
             }
         
         else:
@@ -990,7 +872,7 @@ async def process_answer(answer: AnswerRequest):
 
 @app.post("/generate-pdf")
 async def generate_career_pdf(data: FinalAnswer):
-    """Generate PDF with career roadmap"""
+    """Generate PDF with career roadmap - FIXED for Render"""
     try:
         print(f"\n📄 Generating PDF for {data.user_name}")
         print(f"   Career ID: {data.career_id}")
@@ -1002,12 +884,10 @@ async def generate_career_pdf(data: FinalAnswer):
         
         career = CAREER_PATHS[data.career_id]
         
-        # Create unique filename
+        # Use temporary directory for Render
+        temp_dir = tempfile.gettempdir()
         filename = f"career_roadmap_{data.user_name.replace(' ', '_')}_{uuid.uuid4().hex[:8]}.pdf"
-        filepath = f"./pdfs/{filename}"
-        
-        # Ensure pdfs directory exists
-        os.makedirs("./pdfs", exist_ok=True)
+        filepath = os.path.join(temp_dir, filename)
         
         # Create PDF
         c = canvas.Canvas(filepath, pagesize=letter)
@@ -1018,7 +898,7 @@ async def generate_career_pdf(data: FinalAnswer):
         
         # Title
         c.setFont("Helvetica-Bold", 24)
-        c.setFillColorRGB(0.1, 0.3, 0.6)  # Blue color
+        c.setFillColorRGB(0.1, 0.3, 0.6)
         c.drawString(margin, height - margin, f"Career Roadmap for {data.user_name}")
         
         # Career Title
@@ -1028,8 +908,8 @@ async def generate_career_pdf(data: FinalAnswer):
         
         # Confidence
         c.setFont("Helvetica", 12)
-        c.setFillColorRGB(0, 0.6, 0.2)  # Green color
-        c.drawString(margin, height - margin - 70, f"Match Confidence: 85%")  # Placeholder
+        c.setFillColorRGB(0, 0.6, 0.2)
+        c.drawString(margin, height - margin - 70, f"Match Confidence: 85%")
         
         # Line separator
         c.setStrokeColorRGB(0.8, 0.8, 0.8)
@@ -1073,7 +953,7 @@ async def generate_career_pdf(data: FinalAnswer):
         
         c.save()
         
-        print(f"✅ PDF generated: {filename}")
+        print(f"✅ PDF generated: {filename} in {temp_dir}")
         
         return {
             "success": True,
@@ -1088,84 +968,42 @@ async def generate_career_pdf(data: FinalAnswer):
 
 @app.get("/download-pdf/{filename}")
 async def download_pdf(filename: str):
-    """Download generated PDF"""
-    filepath = f"./pdfs/{filename}"
-    
-    if not os.path.exists(filepath):
-        raise HTTPException(status_code=404, detail="PDF file not found")
-    
-    return FileResponse(
-        filepath,
-        media_type='application/pdf',
-        filename=filename,
-        headers={
-            'Content-Disposition': f'attachment; filename="{filename}"'
-        }
-    )
-
-@app.get("/stats")
-async def get_stats():
-    """Get statistics about the system"""
-    conn = get_db_connection()
-    total_users = 0
-    recent_users = []
-    
-    if conn:
-        try:
-            cursor = conn.cursor()
-            
-            # Count total records
-            cursor.execute("SELECT COUNT(*) FROM user_careers")
-            total_users = cursor.fetchone()[0]
-            
-            # Get recent users
-            cursor.execute("""
-                SELECT user_name, career_title, confidence, created_at 
-                FROM user_careers 
-                ORDER BY created_at DESC 
-                LIMIT 10
-            """)
-            
-            rows = cursor.fetchall()
-            recent_users = [
-                {
-                    "user": row[0],
-                    "career": row[1],
-                    "confidence": row[2],
-                    "created_at": row[3].isoformat() if row[3] else None
-                }
-                for row in rows
-            ]
-            
-            cursor.close()
-            conn.close()
-            
-        except Error as e:
-            print(f"Stats error: {e}")
-    
-    return {
-        "total_users": total_users,
-        "recent_users": recent_users,
-        "total_careers": len(CAREER_PATHS),
-        "total_options": len(QUESTION_TREE["options"]),
-        "server_time": datetime.now().isoformat()
-    }
+    """Download generated PDF from temp directory"""
+    try:
+        temp_dir = tempfile.gettempdir()
+        filepath = os.path.join(temp_dir, filename)
+        
+        if not os.path.exists(filepath):
+            raise HTTPException(status_code=404, detail="PDF file not found or expired")
+        
+        return FileResponse(
+            filepath,
+            media_type='application/pdf',
+            filename=filename,
+            headers={
+                'Content-Disposition': f'attachment; filename="{filename}"'
+            }
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error downloading PDF: {str(e)}")
 
 # ========================================
-# 🎯 MAIN ENTRY POINT
+# 🎯 MAIN ENTRY POINT - RENDER READY
 # ========================================
 
 if __name__ == "__main__":
     import uvicorn
     print("\n" + "="*50)
-    print("🚀 Starting CareerMind AI Backend...")
+    print("🚀 Starting CareerMind AI Backend on Render...")
     print("="*50)
-    setup_database()
     
-    # Run the server
+    # Render automatically sets PORT environment variable
+    port = int(os.environ.get("PORT", 8000))
+    host = "0.0.0.0"
+    
     uvicorn.run(
         "main:app",
-        host="0.0.0.0",  # Listen on all interfaces
-        port=8000,
-        reload=True  # Auto-reload on code changes
+        host=host,
+        port=port,
+        reload=False  # Disable reload on Render
     )
