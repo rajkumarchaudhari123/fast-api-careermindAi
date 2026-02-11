@@ -824,6 +824,10 @@ class FinalAnswer(BaseModel):
 # 🎯 API ENDPOINTS
 # ========================================
 
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
 @app.on_event("startup")
 async def startup_event():
     """Run on server startup"""
